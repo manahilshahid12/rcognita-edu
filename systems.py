@@ -272,6 +272,11 @@ class Sys3WRobotNI(System):
     def _state_dyn(self, t, state, action, disturb=[]):   
         Dstate = np.zeros(self.dim_state)
         
+        Dstate[0] = action[0] * np.cos(state[2])
+        Dstate[1] = action[0] * np.sin(state[2])
+        Dstate[2] = action[1]
+
+        
 
         #####################################################################################################
         ############################# write down here math model of robot ###################################

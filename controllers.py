@@ -354,7 +354,7 @@ class ControllerOptimalPredictive:
             self.dim_critic = int( ( ( self.dim_output + self.dim_input ) + 1 ) * ( self.dim_output + self.dim_input )/2 * 3)
             self.Wmin = np.zeros(self.dim_critic) 
             self.Wmax = np.ones(self.dim_critic) 
-        self.N_CTRL = N_CTRL(ctrl_bnds)
+        self.N_CTRL = N_CTRL()
 
     def reset(self,t0):
         """
@@ -407,7 +407,7 @@ class ControllerOptimalPredictive:
         ################################# write down here cost-function #####################################
         #####################################################################################################
 
-        return run_obj
+        return 1
 
     def _actor_cost(self, action_sqn, observation):
         """
@@ -550,12 +550,48 @@ class ControllerOptimalPredictive:
             return self.action_curr
 
 class N_CTRL:
+    def pure_loop(self, observation):
+        x_robot = observation[0]
+        y_robot = observation[1]
+        theta = observation[2]
+        x_goal = 0
+        y_goal = 0
+        theta_goal = 0
+
+        error_x = x_goal - x_robot
+        error_y = y_goal - y_robot
+        error_theta = theta_goal - theta
+
+        rho = np.sqrt(error_x**2 + error_y**2)
+        alpha = -theta + np.arctan2(error_y, error_x)
+        beta = -theta - alpha
+        
+        k_rho = 2
+        k_alpha = 15
+        k_beta = -1.5
+
+        w = k_alpha*alpha + k_beta*beta
+        v = k_rho*rho
+
+        while alpha > np.pi:
+            alpha -= 2* np.pi
+
+        while alpha < -np.pi:
+            alpha += 2* np.pi
+
+        if -np.pi < alpha <= -np.pi / 2 or np.pi / 2 < alpha <= np.pi:
+            v = -v
+
+        return [v,w]
+
+
+       
 
         #####################################################################################################
         ########################## write down here nominal controller class #################################
         #####################################################################################################
 
-        return [v,w]
+
 
 
 
