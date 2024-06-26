@@ -36,7 +36,7 @@ parser = argparse.ArgumentParser(description=description)
 
 parser.add_argument('--ctrl_mode', metavar='ctrl_mode', type=str,
                     choices=['MPC',
-                             "N_CTRL"],
+                             "N_CTRL","Stanley_CTRL"],
                     default='N_CTRL',
                     help='Control mode. Currently available: ' +
                     '----manual: manual constant control specified by action_manual; ' +
