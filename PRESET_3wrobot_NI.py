@@ -320,7 +320,7 @@ if is_visualization:
                                                      my_sys,
                                                      my_ctrl_nominal,
                                                      my_ctrl_benchm,
-                                                     datafiles,
+                                                      datafiles,
                                                      controllers.ctrl_selector,
                                                      my_logger),
                                             pars=(state_init,
