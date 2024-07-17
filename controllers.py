@@ -22,6 +22,7 @@ import math
 # For debugging purposes
 from tabulate import tabulate
 import os
+import matplotlib.pyplot as plt
 
 def ctrl_selector(t, observation, action_manual, ctrl_nominal, ctrl_benchmarking, mode):
     """
@@ -45,6 +46,7 @@ def ctrl_selector(t, observation, action_manual, ctrl_nominal, ctrl_benchmarking
         action = ctrl_nominal.compute_action(t, observation)
     else: # Controller for benchmakring
         action = ctrl_benchmarking.compute_action(t, observation)
+       
         
     return action
 
@@ -166,7 +168,7 @@ class ControllerOptimalPredictive:
                  t0=0,
                  sampling_time=0.1,
                  Nactor=1,
-                 pred_step_size=0.1,
+                 pred_step_size=1,
                  sys_rhs=[],
                  sys_out=[],
                  state_sys=[],
@@ -181,6 +183,15 @@ class ControllerOptimalPredictive:
                  state_init=[],
                  obstacle=[],
                  seed=1):
+        
+        self.run_obj_struct = run_obj_struct
+        self.run_obj_pars = run_obj_pars
+        self.obstacle_position = None
+        self.obstacle_var_x = None
+        self.obstacle_var_y = None
+        self.obstacle_pos = None 
+        self.dim_input = dim_input
+        self.dim_output = dim_output
         """
             Parameters
             ----------
@@ -275,7 +286,7 @@ class ControllerOptimalPredictive:
                     - 4th order :math:`\\left( \\chi^\\top \\right)^2 R_2 \\left( \\chi \\right)^2 + \\chi^\\top R_1 \\chi`, where :math:`\\chi = [observation, action]`, ``run_obj_pars``
                     should be ``[R1, R2]``
             """        
-
+        
         np.random.seed(seed)
         print(seed)
 
@@ -330,6 +341,7 @@ class ControllerOptimalPredictive:
         self.accum_obj_val = 0
         print('---Critic structure---', self.critic_struct)
 
+
         if self.critic_struct == 'quad-lin':
             self.dim_critic = int( ( ( self.dim_output + self.dim_input ) + 1 ) * ( self.dim_output + self.dim_input )/2 + (self.dim_output + self.dim_input) ) 
             self.Wmin = -1e3*np.ones(self.dim_critic) 
@@ -355,6 +367,8 @@ class ControllerOptimalPredictive:
             self.Wmin = np.zeros(self.dim_critic) 
             self.Wmax = np.ones(self.dim_critic) 
         self.N_CTRL = N_CTRL()
+        # Stanley
+        self.Stanley = Stanley_CTRL()
 
     def reset(self,t0):
         """
@@ -395,19 +409,61 @@ class ControllerOptimalPredictive:
         
         """
         self.accum_obj_val += self.run_obj(observation, action)*self.sampling_time
-                 
+    
+    def initialize_obstacles(self, obstacle):
+        self.obstacle_position = np.array([obstacle[:-2]])
+        self.obstacle_var_x = obstacle[-2]
+        self.obstacle_var_y = obstacle[-2]
+        self.obstacle_pos = np.array([obstacle[ :-2]])
+        return obstacle
+
+    def multivariate(self, x, mu, sigma):
+        d = len(x)
+        exponent = -0.5 * np.dot(np.dot((x - mu).T, np.linalg.inv(sigma)), (x - mu))
+        coefficient = 1 / ((2 * np.pi) ** (d / 2) * np.sqrt(np.linalg.det(sigma)))
+        
+        return coefficient * np.exp(exponent)
+        
+        
+    
     def run_obj(self, observation, action):
         """
         Running (equivalently, instantaneous or stage) objective. Depending on the context, it is also called utility, reward, running cost etc.
         
         See class documentation.
         """
-        run_obj = 1
+
+        rho = 0
+        chi = np.concatenate([observation, action])
+
+        if self.run_obj_struct == "quadratic":
+            R = self.run_obj_pars[0]
+            chi = np.concatenate([observation, action])
+            rho = chi.T @ R @ chi
+        if self.run_obj_struct == 'biquadratic':
+            rho=(chi @ self.run_obj_pars[0] @ chi.T)**2 + chi @ self.run_obj_pars[0] @ chi.T
+            return rho
+        
+        if self.obstacle_pos is not None:
+            obstacle_gain = 100
+            obs_cost_x = self.multivariate(observation[0], self.obstacle_position[0][0], self.obstacle_var_x)
+            obs_cost_y = self.multivariate(observation[1], self.obstacle_position[0][1], self.obstacle_var_y)
+            obs_cost = obs_cost_x * obs_cost_y
+            rho += obstacle_gain * obs_cost
+           
+
+        return rho
+    # Initialize the class instance
+    
+        
+        #run_obj = 1
+        
+
         #####################################################################################################
         ################################# write down here cost-function #####################################
         #####################################################################################################
 
-        return 1
+
 
     def _actor_cost(self, action_sqn, observation):
         """
@@ -436,7 +492,7 @@ class ControllerOptimalPredictive:
         if self.mode=='MPC':
             for k in range(self.Nactor):
                 J += self.gamma**k * self.run_obj(observation_sqn[k, :], my_action_sqn[k, :])
-
+        
         return J
     
     def _actor_optimizer(self, observation):
@@ -516,7 +572,7 @@ class ControllerOptimalPredictive:
             action_sqn = self.action_curr
         
         return action_sqn[:self.dim_input]    # Return first action
-                    
+                        
     def compute_action(self, t, observation):
         """
         Main method. See class documentation.
@@ -541,6 +597,11 @@ class ControllerOptimalPredictive:
             elif self.mode == "N_CTRL":
                 
                 action = self.N_CTRL.pure_loop(observation)
+
+            elif self.mode == "Stanley_CTRL":
+                
+                action = self.Stanley.pure_loop(observation)
+
             
             self.action_curr = action
             
@@ -548,27 +609,32 @@ class ControllerOptimalPredictive:
     
         else:
             return self.action_curr
-
+      
+               
 class N_CTRL:
-    def pure_loop(self, observation):
+    def pure_loop(self, observation, goal=[0, 0, 0]):
         x_robot = observation[0]
         y_robot = observation[1]
         theta = observation[2]
         x_goal = 0
         y_goal = 0
         theta_goal = 0
-
+        
         error_x = x_goal - x_robot
         error_y = y_goal - y_robot
         error_theta = theta_goal - theta
 
         rho = np.sqrt(error_x**2 + error_y**2)
         alpha = -theta + np.arctan2(error_y, error_x)
-        beta = -theta - alpha
+        beta = error_theta - alpha
         
-        k_rho = 2
-        k_alpha = 15
-        k_beta = -1.5
+        # k_rho = 2
+        # k_alpha = 14
+        # k_beta = -1.5
+
+        k_rho = 0.15
+        k_alpha = 0.17
+        k_beta = -0.05
 
         w = k_alpha*alpha + k_beta*beta
         v = k_rho*rho
@@ -582,16 +648,128 @@ class N_CTRL:
         if -np.pi < alpha <= -np.pi / 2 or np.pi / 2 < alpha <= np.pi:
             v = -v
 
-        return [v,w]
+        return [v,w] 
+class  TrajectoryGenerator:
+  def __init__(self,n):
+        self.n = n
+        self.t=np.linspace(0,2*np.pi,self.n)
+
+        
+        
+  def generate_trajectory(self):
+    
+    x_traj = R * np.cos(self.t)
+    y_traj = R * np.sin(self.t)
+    theta_traj = np.zeros(self.n)
+    for i in range(0,self.n):
+        dy = y_traj[i] - y_traj[i-1]
+        dx = x_traj[i] - x_traj[i-1]
+        theta_traj[i] = np.arctan2(dy, dx)
+    print("Trajectory: ")
+    print(x_traj, y_traj, theta_traj)
+    return x_traj, y_traj, theta_traj
 
 
+R = 2.5  # radius (you can adjust this)
+# Example waypoints
+
+# Generate trajectory from waypoints
+trajectory_generator = TrajectoryGenerator(11)
+
+x_traj, y_traj, theta_traj = trajectory_generator.generate_trajectory()
+
+
+class Stanley_CTRL:
+    def __init__(self):
+        self.L = 1.0  # Distance between front and rear wheels
+        self.k = 2.7  # Control gain
+        self.v = 2.0  # Desired speed
+
+        self.x_traj=x_traj
+        self.y_traj=y_traj
+        self.theta_traj=theta_traj
+
+        self.goal_waypoint = 0
+     
+
+    def pure_loop(self, observation):
+        x_robot, y_robot, theta = observation
+
+        # Calculate position of front wheel
+        x_front = x_robot + self.L * np.cos(theta)
+        y_front = y_robot + self.L * np.sin(theta)
+
+        dx = self.x_traj[self.goal_waypoint] - x_front
+        dy = self.y_traj[self.goal_waypoint] - y_front
+        dist_to_goal = np.hypot(dx, dy)
+        if dist_to_goal < 0.8:
+            self.goal_waypoint += 1
+        target_dist = self.goal_waypoint
+        print("Target Point x: {}, y: {}, theta: {}".format(self.x_traj[target_dist], self.y_traj[target_dist], self.theta_traj[target_dist]))
+        print(dist_to_goal)
+        print(target_dist)
        
 
-        #####################################################################################################
-        ########################## write down here nominal controller class #################################
-        #####################################################################################################
+        theta_error = theta_traj[target_dist] - theta
+        delta = theta_error + np.arctan(self.k * self.error(y_traj[target_dist], x_traj[target_dist], x_robot, y_robot, theta_traj[target_dist]) / self.v)
+        v=self.v
+        w=self.v * np.tan(delta) / self.L
 
+        return [v, delta]
+    
 
+    def error(self, y_ref, x_ref, x_robot, y_robot, theta):
+        # y_ref=0
+        # x_ref=0
+        e_fa=(y_ref - y_robot) * np.cos(theta) - (x_ref - x_robot) * np.sin(theta)
+        return e_fa
 
+'''''
+# obstacle_environment
+
+class ObstacleEnvironment:
+    def __init__(self, goal, obstacle, grid_size=50, obstacle_radius=2, influence_radius=15):
+        self.goal = goal
+        self.obstacle = obstacle
+        self.grid_size = grid_size
+        self.obstacle_radius = obstacle_radius
+        self.influence_radius = influence_radius
+        
+        self.x = np.arange(0, self.grid_size, 1)
+        self.y = np.arange(0, self.grid_size, 1)
+        self.X, self.Y = np.meshgrid(self.x, self.y)
+        self.delx = np.zeros_like(self.X)
+        self.dely = np.zeros_like(self.Y)
+        self.cost = np.zeros_like(self.X)
+        
+        self.calculate_influence_fields()
+    
+    def calculate_influence_fields(self):
+        for i in range(len(self.x)):
+            for j in range(len(self.y)):
+                d_goal = np.sqrt((self.goal[0] - self.X[i][j]) ** 2 + (self.goal[1] - self.Y[i][j]) ** 2)
+                d_obstacle = np.sqrt((self.obstacle[0] - self.X[i][j]) ** 2 + (self.obstacle[1] - self.Y[i][j]) ** 2)
+                theta_goal = np.arctan2(self.goal[1] - self.Y[i][j], self.goal[0] - self.X[i][j])
+                theta_obstacle = np.arctan2(self.obstacle[1] - self.Y[i][j], self.obstacle[0] - self.X[i][j])
+                
+                if d_obstacle < self.obstacle_radius:
+                    self.delx[i][j] = np.sign(np.cos(theta_obstacle))
+                    self.dely[i][j] = np.sign(np.sin(theta_obstacle))
+                elif d_obstacle < self.obstacle_radius + self.influence_radius:
+                    influence = (self.influence_radius + self.obstacle_radius - d_obstacle) / self.influence_radius
+                    self.delx[i][j] = -120 * influence * np.cos(theta_obstacle)
+                    self.dely[i][j] = -120 * influence * np.sin(theta_obstacle)
+                    self.cost[i][j] = influence  # High cost area based on proximity to the obstacle
+
+    def get_influence_fields(self):
+        return self.X, self.Y, self.delx, self.dely, self.cost
+
+# Example usage:
+goal_position = (45, 45)  # Example goal position
+obstacle_position = (30, 30)  # Example obstacle position
+
+environment = ObstacleEnvironment(goal_position, obstacle_position)
+X, Y, delx, dely, cost = environment.get_influence_fields()
+'''
 
 
