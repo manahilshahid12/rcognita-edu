@@ -14,10 +14,15 @@ from utilities import to_col_vec
 
 import matplotlib as mpl 
 import matplotlib.pyplot as plt
+from scipy.stats import multivariate_normal
 
 from svgpath2mpl import parse_path
 from collections import namedtuple
 # from svgpathconverter import SVGPathConverter
+
+from controllers import TrajectoryGenerator
+#from controllers import ObstacleEnvironment 
+#from controllers import ControllerOptimalPredictive
 
 class Animator:
     """
@@ -138,21 +143,42 @@ class Animator3WRobotNI(Animator):
         print(v_min, v_max, omega_min, omega_max)
      
         self.fig_sim = plt.figure(figsize=(10,10))    
-            
+        trajectory_generator = TrajectoryGenerator(11)
+        x_traj, y_traj, theta_traj = trajectory_generator.generate_trajectory()
+        goal_position = (50, 50)  # Example goal position
+        obstacle_position = (30, 30)  # Example obstacle position
+        #environment = ObstacleEnvironment(goal_position, obstacle_position)
+        #X, Y, delx, dely, cost = environment.get_influence_fields()
+      
+        #obstacle_1 = ControllerOptimalPredictive(dim_input, dim_output)
+        #obstacle_sigma_x, obstacle_sigma_y = obstacle_1.initialize_obstacles()
+        
+               
         # xy plane  
-        self.axs_xy_plane = self.fig_sim.add_subplot(221, autoscale_on=False, xlim=(xMin,xMax), ylim=(yMin,yMax),
+        self.axs_xy_plane = self.fig_sim.add_subplot(221, autoscale_on=True, 
+                                                    #  xlim=(xMin,xMax), ylim=(yMin,yMax),
                                                   xlabel='x [m]', ylabel='y [m]', title='Pause - space, q - quit, click - data cursor')
         self.axs_xy_plane.set_aspect('equal', adjustable='box')
         self.axs_xy_plane.plot([xMin, xMax], [0, 0], 'k--', lw=0.75)   # Help line
         self.axs_xy_plane.plot([0, 0], [yMin, yMax], 'k--', lw=0.75)   # Help line
+        self.axs_xy_plane.plot(x_traj, y_traj)
+        self.axs_xy_plane.scatter(x_traj, y_traj)
         self.line_traj, = self.axs_xy_plane.plot(xCoord0, yCoord0, 'b--', lw=0.5)
-
+        #self.axs_xy_plane.plot(obstacle_sigma_x, obstacle_sigma_y)
+        #self.axs_xy_plane.scatter(obstacle_sigma_x, obstacle_sigma_y)
+        #self.axs_xy_plane.plot(X, Y, delx, dely, cost)
+        #self.axs_xy_plane.scatter(X, Y)
+        
 
         cirlce_target = plt.Circle((0, 0), radius=0.2, color='y', fill=True, lw=2)
         self.axs_xy_plane.add_artist(cirlce_target)
         self.text_target_handle = self.axs_xy_plane.text(0.88, 0.9, 'Target',
                                                    horizontalalignment='left', verticalalignment='center', transform=self.axs_xy_plane.transAxes)        
 
+        #cirlce_obstacle = plt.Circle((-2, -2), radius=0.3, color='r', fill=True, lw=2)
+        #self.axs_xy_plane.add_artist(cirlce_obstacle)
+        #self.text_target_handle = self.axs_xy_plane.text(0.44, 0.5, 'Obstacle',
+                                                   #horizontalalignment='left', verticalalignment='center', transform=self.axs_xy_plane.transAxes)
 
 
         self.robot_marker = RobotMarker(angle=alpha_deg0)
@@ -203,7 +229,8 @@ class Animator3WRobotNI(Animator):
         
         self.AAA = []
         self.index_prev = 0
-    
+        
+
     def set_sim_data(self, ts, xCoords, yCoords, alphas, rs, accum_objs, vs, omegas):
         """
         This function is needed for playback purposes when simulation data were generated elsewhere.
