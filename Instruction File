@@ -1,0 +1,3 @@
+To run stanley controller, un-comment this line Dstate[2] = action[0] * np.tan(action[1]) in the systems.py and comment out Dstate[2] = action[1].
+To run the nominal controller un-comment this line Dstate[2] = action[1] in the systems.py and comment out Dstate[2] = action[0] * np.tan(action[1]).
+Also for he visualization of trajectory for stanley un comment the lines in the visuals.py
