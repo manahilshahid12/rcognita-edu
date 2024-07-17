@@ -20,7 +20,7 @@ from svgpath2mpl import parse_path
 from collections import namedtuple
 # from svgpathconverter import SVGPathConverter
 
-from controllers import TrajectoryGenerator
+#from controllers import TrajectoryGenerator
 #from controllers import ObstacleEnvironment 
 #from controllers import ControllerOptimalPredictive
 
@@ -143,8 +143,8 @@ class Animator3WRobotNI(Animator):
         print(v_min, v_max, omega_min, omega_max)
      
         self.fig_sim = plt.figure(figsize=(10,10))    
-        trajectory_generator = TrajectoryGenerator(11)
-        x_traj, y_traj, theta_traj = trajectory_generator.generate_trajectory()
+        #trajectory_generator = TrajectoryGenerator(11)
+        #x_traj, y_traj, theta_traj = trajectory_generator.generate_trajectory()
         goal_position = (50, 50)  # Example goal position
         obstacle_position = (30, 30)  # Example obstacle position
         #environment = ObstacleEnvironment(goal_position, obstacle_position)
@@ -175,10 +175,10 @@ class Animator3WRobotNI(Animator):
         self.text_target_handle = self.axs_xy_plane.text(0.88, 0.9, 'Target',
                                                    horizontalalignment='left', verticalalignment='center', transform=self.axs_xy_plane.transAxes)        
 
-        #cirlce_obstacle = plt.Circle((-2, -2), radius=0.3, color='r', fill=True, lw=2)
-        #self.axs_xy_plane.add_artist(cirlce_obstacle)
-        #self.text_target_handle = self.axs_xy_plane.text(0.44, 0.5, 'Obstacle',
-                                                   #horizontalalignment='left', verticalalignment='center', transform=self.axs_xy_plane.transAxes)
+        cirlce_obstacle = plt.Circle((-2, -2), radius=0.3, color='r', fill=True, lw=2)
+        self.axs_xy_plane.add_artist(cirlce_obstacle)
+        self.text_target_handle = self.axs_xy_plane.text(0.44, 0.5, 'Obstacle',
+                                                   horizontalalignment='left', verticalalignment='center', transform=self.axs_xy_plane.transAxes)
 
 
         self.robot_marker = RobotMarker(angle=alpha_deg0)
