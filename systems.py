@@ -274,7 +274,8 @@ class Sys3WRobotNI(System):
         
         Dstate[0] = action[0] * np.cos(state[2])
         Dstate[1] = action[0] * np.sin(state[2])
-        Dstate[2] = action[1]
+        #Dstate[2] = action[1]
+        Dstate[2] = action[0] * np.tan(action[1])
 
         
 
